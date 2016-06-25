@@ -6,7 +6,7 @@
 #include <QSettings>
 
 SynchronizationManager::SynchronizationManager(QObject *parent):
-    QObject(parent),tcpServer(0),blockSize(0),port(0),synchroState(1)
+    QObject(parent),tcpServer(0), blockSize(0),port(0)
 {
     sessionOpened();
     connect(tcpServer, SIGNAL(newConnection()), this, SLOT(acceptPeer()));
@@ -16,7 +16,8 @@ QByteArray packData(QByteArray &data){
     QByteArray block;
         QDataStream out(&block, QIODevice::WriteOnly);
         out.setVersion(QDataStream::Qt_4_0);
-        out << (quint16) data.size();
+        quint16 size = data.size();
+        out << (quint16) size;
         block.push_back(data);
     return block;
 }
@@ -53,25 +54,21 @@ void SynchronizationManager::sessionOpened(){
 
 int SynchronizationManager::ConnectToPeer(QHostAddress addr , int port, QByteArray &data){
 
+    if(!addr.toIPv4Address())
+        return EXIT_FAILURE;
+
     QTcpSocket *newConnect = new QTcpSocket(this);
-    //Connect to first peer
-    if(!peers.size()){
-
-        tcpAddr a(addr,port);
-
-        peers.push_back(a);
-    }
 
     connect(newConnect,SIGNAL(disconnected()),this,SLOT(destroySocket()));
 
     //connect(newConnect, SIGNAL(error(QAbstractSocket::SocketError)),
-   // this, SLOT(socketError(QAbstractSocket::SocketError)));
-    //newConnect->abort();
+    //   this, SLOT(socketError(QAbstractSocket::SocketError)));
+    //    newConnect->abort();
     newConnect->connectToHost(addr,port);
 
     QByteArray block = packData(data); //add amount of byte header
 
-    if(!newConnect->waitForConnected(3000))
+    if(!newConnect->waitForConnected(2000))
         return EXIT_FAILURE;
 
         newConnect->write(block, block.size());
@@ -133,7 +130,6 @@ void SynchronizationManager::acceptPeer(){
     connect(peerSock,SIGNAL(disconnected()),this,SLOT(destroySocket()));
     //connect(peerSock, SIGNAL(error(QAbstractSocket::SocketError)),this, SLOT(socketError(QAbstractSocket::SocketError)));
 
-
 }
 
 void SynchronizationManager::recieve(){
@@ -146,7 +142,7 @@ void SynchronizationManager::recieve(){
 
        in.setVersion(QDataStream::Qt_4_0);
 
-       if (blockSize == 0) {
+       if (!blockSize) {
            if (socket->bytesAvailable() < (int)sizeof(quint16))
                return;
            in >> blockSize;
@@ -155,25 +151,12 @@ void SynchronizationManager::recieve(){
        if (socket->bytesAvailable() < blockSize)
            return;
 
-        quint16 newPort;
-        quint32 ip;
+        blockSize = 0;
 
-        in>>ip;
-        in>>newPort;
-        QHostAddress peerAddress(ip);
+        int dataAmount = socket->bytesAvailable();
 
-
-        tcpAddr senderOfMessage(peerAddress,newPort);
-
-        if(!HasSuchClient(senderOfMessage)){
-            peers.push_back(senderOfMessage);
-        }
-
-        out<<ip;
-        out<<newPort;
-
-        for(int i=0;i<blockSize-3;i+=2){
-          quint16 data;
+        for(int i=0;i<dataAmount;i++){
+          quint8 data;
           in >> data;
           out<<data;
        }
@@ -181,12 +164,10 @@ void SynchronizationManager::recieve(){
        socket->close();
        socket->deleteLater();
 
-       blockSize = 0;
-
-       emit ReadData(senderOfMessage,data);
+       emit ReadData(data);
 
 }
-bool SynchronizationManager::HasSuchClient(tcpAddr newAddr){
+bool SynchronizationManager::HasSuchAddress(tcpAddr newAddr){
     for(int i=0;i<peers.size();i++){
         if(peers[i]==newAddr)
             return true;

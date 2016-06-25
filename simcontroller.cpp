@@ -59,11 +59,14 @@ int SimController::AddBall(Ball &ball)
 
     CollisionEvent event;
     event.b1=balls.size()-1;
-    event.b2=-1;
+    event.b2=-1; //with wall
     event.tau=tau;
+    //Add please for its events
     events.push_back(event);
+    //Calculate next event
     updateFutureCollidesAfterEvent(event);
     //SetMaxStepLength(stepSize);
+
     return EXIT_SUCCESS;
 }
 
@@ -73,16 +76,16 @@ int SimController::initBallsScene(){
     if(balls.size()){
         balls.clear();
     }
-
+    //Ball 1
     Ball ball;
     ball.Mass = 400;
-     ball.Rad = 40;
+    ball.Rad = 40;
     ball.pos = { (float) 1*maxP.x()/3, (float) maxP.y()/2.};
     ball.Speed = 20;
     ball.V = {1,0};
     ball.V*=ball.Speed;
     balls.push_back(ball);
-
+    //Ball 2
     ball.Mass =ball.Rad =30;
     ball.pos = { (float) 2*maxP.x()/3, (float) maxP.y()/2.};
     ball.Speed = 20;
@@ -90,21 +93,31 @@ int SimController::initBallsScene(){
     ball.V.normalize();
     ball.V*=ball.Speed;
     balls.push_back(ball);
-
+    //Ball 3
     ball.Mass =ball.Rad =30;
     ball.pos = {(float)1*maxP.x()/2,(float) maxP.y()/3.};
     ball.Speed = 50;
-    ball.V = {(float)1,(float)1};
+    ball.V = {(float)1,(float)-1};
     ball.V.normalize();
     ball.V*=ball.Speed;
-    //balls.push_back(ball);
+    balls.push_back(ball);
 
     return EXIT_SUCCESS;
 }
+
+int SimController::ClearScene(){
+    this->balls.clear();
+    this->events.clear();
+    return EXIT_SUCCESS;
+}
+
 int SimController::initFutureEvents(){
+
     CollisionEvent event;
     events.resize(balls.size());
+
     for(int i=0;i<balls.size();i++){
+
         if( findCollisionEvent(i,event)){
                 events[i]=event;
         }
@@ -114,6 +127,7 @@ int SimController::initFutureEvents(){
 }
 
 int SimController::updateFutureCollidesAfterEvent(CollisionEvent event){
+
     int b1 = event.b1;
     int b2 = event.b2;
 
@@ -125,6 +139,7 @@ int SimController::updateFutureCollidesAfterEvent(CollisionEvent event){
     }
 
     nextCollisionUpdate();
+
     return EXIT_SUCCESS;
 }
 int SimController::processCollision(CollisionEvent event){
@@ -162,7 +177,6 @@ int SimController::processCollision(CollisionEvent event){
     else{ //with wall collision
 
         if(event.b2 == -1 || event.b2 == -3)
-
             balls[b1].V.setX((-1) * balls[b1].V.x());
         else
             balls[b1].V.setY((-1) * balls[b1].V.y());
@@ -192,7 +206,6 @@ void SimController::nextStateAfter(time_ delta)
     }
 }
  bool SimController::findCollisionEvent(int forBall, CollisionEvent &event){
-
 
      Ball &b = balls[forBall];
 

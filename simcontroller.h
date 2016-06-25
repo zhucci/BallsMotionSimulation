@@ -22,12 +22,21 @@ public:
     SimController(int xs, int ys, double deltaT);
 
     int SetInitState();
+
     int Move();
+
     const QVector<Ball> &GetBalls() const;
+
+    int ClearScene();
+
     int SetMaxStepLength(double stepL);
+
     int AddBall(Ball &ball);
+
     bool IsInitialize(){return (bool)balls.size();}
+
     double GetTime(){return tau;}
+
 private:
     int initBallsScene();
     int initFutureEvents();

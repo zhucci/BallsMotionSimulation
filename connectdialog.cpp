@@ -19,7 +19,8 @@ void ConnectDialog::on_buttonBox_accepted(){
             ui->portEdit->text().size()){
         host = QHostAddress(ui->ipEdit->text());
         port = ui->portEdit->text().toInt();
-        isAccepted= true;
+        if(host.toIPv4Address()!=0)
+            isAccepted= true;
     }
     this->close();
 }

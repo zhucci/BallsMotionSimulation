@@ -11,15 +11,19 @@ enum SynchroStatus{Start, Stop, Reset, AddBalls, GetBalls};
 
 struct tcpAddr{
     tcpAddr(QHostAddress h, int p):host(h),port(p){}
+
     tcpAddr(){}
+
     tcpAddr(const tcpAddr& ad):host(ad.host),port(ad.port){}
-    QHostAddress host;
-    int port;
+
     bool operator==(tcpAddr &addr){
         if(host.toIPv4Address() == (addr.host.toIPv4Address()) && port == addr.port)
             return true;
         return false;
     }
+
+    QHostAddress host;
+             int port;
 };
 
 class SynchronizationManager :public  QObject
@@ -34,11 +38,13 @@ public:
     int ConnectToPeer(QHostAddress addr, int port, QByteArray &data);
     int SyncData(QByteArray &array);
     int GetServerAddress(QString &addr);
-    int GetServerPort(){return tcpServer->serverPort();}
-    quint32 GetServerIP(){return tcpServer->serverAddress().toIPv4Address();}
+    int GetServerPort(){return port;}
+    quint32 GetServerIP(){return ipAddress.toIPv4Address();}
+    bool HasSuchAddress(tcpAddr newAddr);
+    void AddNewAddressToRootTable(tcpAddr address){peers.push_back(address);}
 
 private:
-    bool HasSuchClient(tcpAddr newAddr);
+
 private slots:
 
     void socketError(QAbstractSocket::SocketError err);
@@ -49,20 +55,17 @@ private slots:
 
 signals:
 
-    void ReadData(tcpAddr host, QByteArray byteArray);
+    void ReadData(QByteArray byteArray);
     void needSendData(tcpAddr mesSender);
     void ErrorOccure(QString message);
     void serverAddressChanged(QString addr);
 
 private:
 
-      QByteArray *data;
-         quint16 blockSize;
-             int synchroState;
-    QHostAddress ipAddress;
-      QTcpServer  *tcpServer;
-             int  port;
-
+           QTcpServer *tcpServer;
+              quint16 blockSize;
+         QHostAddress ipAddress;
+                  int port;
     QVector <tcpAddr> peers;
 
 };

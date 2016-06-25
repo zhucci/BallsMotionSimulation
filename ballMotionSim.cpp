@@ -6,7 +6,7 @@
 #include <QMessageBox>
 
 BallMotionSim::BallMotionSim(QWidget *parent):QWidget(parent),
-    status(SynchroStatus::Stop),prevMessageDesc(0)
+    status(SynchroStatus::Stop),ttl(3)
 { 
     setMouseTracking(true);
     this->setCursor(Qt::CrossCursor);
@@ -15,12 +15,11 @@ BallMotionSim::BallMotionSim(QWidget *parent):QWidget(parent),
     setAutoFillBackground(true);
 
     timer = new QBasicTimer();
-    //this->adjustSize();
+
     syncManager = new SynchronizationManager(this);
 
-    connect(syncManager, SIGNAL(ReadData(tcpAddr , QByteArray)),this,SLOT(ParseMessageFrom(tcpAddr,QByteArray)));
+    connect(syncManager, SIGNAL(ReadData(QByteArray)),this,SLOT(ParseMessageFrom(QByteArray)));
     connect(syncManager, SIGNAL(ErrorOccure(QString)),parent,SLOT(ErrorMessageShow(QString)));
-    //connect(syncManager, SIGNAL(serverAddressChanged(QString)),parent,SLOT(on_serverAddressChanged(QString)));
 
 
 
@@ -42,41 +41,55 @@ int BallMotionSim::InitSimulation(){
 
 int BallMotionSim::StartSim(bool synchro){
 
-    if(!showMustGoOn){
-        if(!controller->IsInitialize())
-            controller->SetInitState();
-         timer->start(50,this);
-         controller->Move();
-         this->update();
+    if(status!=SynchroStatus::Start){
+        status = SynchroStatus::Start;
 
-         if(synchro){
+        //Init controller
+        if(!controller->IsInitialize())
+             controller->SetInitState();
+
+        //Start timer
+        timer->start(50,this);
+
+        //Synchronization
+        if(synchro){
              status = SynchroStatus::Start;
-             auto data = statusChangedMessage(status);
+             QByteArray data = headerOfMessage(status);
              syncManager->SyncData(data);
-         }
+        }
     }
 
     return EXIT_SUCCESS;
 }
 
 void BallMotionSim::StopSim(bool synchro){
-    timer->stop();
-     if(synchro){
-        status = SynchroStatus::Stop;
-        auto data = statusChangedMessage(status);
-        syncManager->SyncData(data);
-     }
+
+    if(status!=SynchroStatus::Stop){
+
+         status = SynchroStatus::Stop;
+         timer->stop();
+
+         if(synchro){
+            auto data = headerOfMessage(status);
+            syncManager->SyncData(data);
+         }
+    }
 
 }
 
 int BallMotionSim::ResetBalls(bool synchro){
 
-    controller->SetInitState();
-    this->update();
-    if(synchro){
+    if(status!=SynchroStatus::Reset){
+
+        StopSim(false);
         status = SynchroStatus::Reset;
-        auto data = statusChangedMessage(status);
-        syncManager->SyncData(data);
+        controller->SetInitState();
+        this->update();
+
+        if(synchro){
+            auto data = headerOfMessage(status);
+            syncManager->SyncData(data);
+        }
     }
     return EXIT_SUCCESS;
 }
@@ -91,15 +104,19 @@ void BallMotionSim::AddNewBalls(QVector<Ball> balls){
 }
 
 void BallMotionSim::newBallAdded(Ball ball){
-    //if ball don't collide
+
     //add new ball to simulation module
 
-    QVector<Ball> balls;
-    balls.push_back(ball);
-    auto data = packBalls(balls);
+    QVector<Ball> newballs;
+
+    newballs.push_back(ball);
+
+    auto data = packBalls(newballs);
+
     syncManager->SyncData(data);
 
     controller->AddBall(ball);
+
     this->update();
 }
 
@@ -112,7 +129,6 @@ void BallMotionSim::paintEvent(QPaintEvent *){
 
     updateImage();
 }
-
 
 void BallMotionSim::updateImage(){
 
@@ -140,99 +156,113 @@ void BallMotionSim::StatusChanged(int ){
 
 }
 
-
 int BallMotionSim::ConnectToServer(QHostAddress address, int port){
-    QByteArray array;
-    QDataStream str(&array, QIODevice::WriteOnly);
-    //Debug
 
-    quint16 desc = ++prevMessageDesc;
+    QByteArray message = headerOfMessage(SynchroStatus::GetBalls);
 
-    quint16 myPort = syncManager->GetServerPort();
-    quint32 ip = address.toIPv4Address();
-    str << (quint32) ip;                            // ip
-    str << (quint16) myPort;                        // port
-    str << (quint16) desc;                          //descriptor
-    str << (quint16) SynchroStatus::GetBalls;       //status
-                                                    //no data
+    controller->ClearScene();
 
-    if(syncManager->ConnectToPeer(address,port,array)){
+    if(syncManager->ConnectToPeer(address,port,message)){
         QMessageBox *mes = new QMessageBox(this);
         mes->setText(QString("Can't connect to %1 : %2").arg(address.toString()).arg(port,7));
         mes->show();
     }
     return EXIT_SUCCESS;
 }
-QByteArray BallMotionSim::statusChangedMessage(SynchroStatus newStatus){
+QByteArray BallMotionSim::headerOfMessage(SynchroStatus newStatus){
 
     QByteArray data;
     QDataStream out(&data, QIODevice::WriteOnly);
 
     quint16 port = syncManager->GetServerPort();
     quint16 status = newStatus;
-    quint16 descriptor = ++prevMessageDesc;
     quint32 ip = syncManager->GetServerIP();
 
-    out<<(quint32)ip<<(quint16)port<<(quint16)descriptor<<(quint16)status;
+    out<<(quint32)ip<<(quint16)port<<(quint16)ttl<<(quint16)status;
+
     return data;
 }
 
-void BallMotionSim::ParseMessageFrom(tcpAddr mesSender, QByteArray byteArray){
+void BallMotionSim::ParseMessageFrom(QByteArray byteArray){
 
     QDataStream str(byteArray);
     quint32 ip;
     quint16 port;
-    quint16 descriptor;
-    quint16 status;
-
+    quint16 newStatus;
+    quint16 mesTTL;
     str>>ip;
     str>>port;
-    str>> descriptor;
-    str>> status;
+    str>> mesTTL;
+    str>> newStatus;
 
-    if(descriptor==prevMessageDesc)
+    //message time to live
+    if(!(--mesTTL))
         return;
     else
-        prevMessageDesc = descriptor;
+        byteArray[7]=mesTTL;
+
+    //forbidden ip
+    if(!ip)
+        return;
+
+    //messege loop
+    if(ip==syncManager->GetServerIP() && port == syncManager->GetServerPort())
+        return;
 
 
-    if(status==SynchroStatus::Start){
-        syncManager->SyncData(byteArray);
-        StartSim(false);
+    QHostAddress peerAddress(ip);
+    tcpAddr senderOfMessage(peerAddress,port);
+
+    if(!syncManager->HasSuchAddress(senderOfMessage)){
+        syncManager->AddNewAddressToRootTable(senderOfMessage);
     }
-    else if(status == SynchroStatus::Stop){
+
+
+    if(status != newStatus && newStatus==SynchroStatus::Start){
+        //Broadcast same message with --ttl
         syncManager->SyncData(byteArray);
+
+        StartSim(false);
+
+    }
+    else if(status != newStatus && newStatus == SynchroStatus::Stop){
+        //Broadcast same message with --ttl
+        syncManager->SyncData(byteArray);
+
         StopSim(false);
     }
-    else if(status == SynchroStatus::Reset){
+    else if(status != newStatus && newStatus == SynchroStatus::Reset){
+
+        //Broadcast same message with --ttl
         syncManager->SyncData(byteArray);
+
         StopSim(false);
         ResetBalls(false);
     }
-    else if(status == SynchroStatus::GetBalls){
+    else if(newStatus == SynchroStatus::GetBalls){
+
         QByteArray colOfBall= packBalls(controller->GetBalls());
+
         //send response
-       syncManager->ConnectToPeer(mesSender.host, mesSender.port, colOfBall);
+        auto data = headerOfMessage(SynchroStatus(status));
+        syncManager->ConnectToPeer(senderOfMessage.host, senderOfMessage.port, data);
+        syncManager->ConnectToPeer(senderOfMessage.host, senderOfMessage.port, colOfBall);
     }
-    else if(status == SynchroStatus::AddBalls){
+    else if(newStatus == SynchroStatus::AddBalls){
         QVector<Ball> ballRecv = unPackBalls(byteArray);
         AddNewBalls(ballRecv);
         syncManager->SyncData(byteArray);
     }
 }
 
+
 QByteArray BallMotionSim::packBalls(const QVector<Ball> &ballArray){
-    QByteArray ballsRaw;
-    QDataStream out(&ballsRaw, QIODevice::WriteOnly );
-    quint32 ip = syncManager->GetServerIP();
-    quint16 port = syncManager->GetServerPort();
-    quint16 descriptor = ++prevMessageDesc;
-    quint16 stat = SynchroStatus::AddBalls;
-    //Header
-    out<<(quint32) ip;
-    out<<(quint16) port;
-    out<<(quint16)descriptor;
-    out<<(quint16)stat;
+
+
+    QByteArray ballsRaw = headerOfMessage(SynchroStatus::AddBalls);
+
+     QDataStream out(&ballsRaw, QIODevice::Append);
+
     //Data
     out<<(quint16) ballArray.size();
 
@@ -297,7 +327,7 @@ bool BallMotionSim::IsBallsCollide(QVector2D pos, double rad){
     auto &balls = controller->GetBalls();
     for(Ball ball : balls){
         if((ball.pos-pos).length() < (ball.Rad + rad))
-            return EXIT_FAILURE;
+            return true;
     }
-    return EXIT_SUCCESS;
+    return false;
 }

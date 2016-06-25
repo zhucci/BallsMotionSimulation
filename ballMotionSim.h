@@ -19,10 +19,13 @@ public:
     int InitSimulation();
 
     int StartSim(bool synchro=true);
+
     void StopSim(bool synchro=true);
+
     int ResetBalls(bool synchro=true);
 
     QString GetServerAddress(){QString str;syncManager->GetServerAddress(str);return str;}
+
     bool IsBallsCollide(QVector2D pos, double rad);
 
     void paintEvent(QPaintEvent *pe);
@@ -37,19 +40,18 @@ public slots:
 
     void newBallAdded(Ball ball);
     void AddNewBalls(QVector<Ball> balls);
-    void ParseMessageFrom(tcpAddr mesSender, QByteArray byteArray);
+    void ParseMessageFrom(QByteArray byteArray);
     void mousePressEvent(QMouseEvent *event);
 
 private:
     void updateImage();
     QByteArray packBalls(const QVector<Ball> &balls);
     QVector<Ball> unPackBalls(QByteArray &data);
-    QByteArray statusChangedMessage(SynchroStatus newStatus);
+    QByteArray headerOfMessage(SynchroStatus newStatus);
 private:
-    bool showMustGoOn;
     SynchroStatus status;
     QBasicTimer *timer;
-    quint16 prevMessageDesc;
+    quint16 ttl;
 
     SimController *controller;
     SynchronizationManager *syncManager;
