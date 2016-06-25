@@ -6,7 +6,7 @@
 #include <QMessageBox>
 
 BallMotionSim::BallMotionSim(QWidget *parent):QWidget(parent),
-    status(SynchroStatus::Stop),ttl(3)
+    status(SynchroStatus::Stop),ttl(3),StepPause(50)
 { 
     setMouseTracking(true);
     this->setCursor(Qt::CrossCursor);
@@ -49,7 +49,7 @@ int BallMotionSim::StartSim(bool synchro){
              controller->SetInitState();
 
         //Start timer
-        timer->start(50,this);
+        timer->start(StepPause,this);
 
         //Synchronization
         if(synchro){
@@ -121,8 +121,11 @@ void BallMotionSim::newBallAdded(Ball ball){
 }
 
 void BallMotionSim::timerEvent(QTimerEvent *){
+
         controller->Move();
         this->update();
+        timer->stop();
+        timer->start((int)(StepPause*controller->NextDeltaT()),this);
 }
 
 void BallMotionSim::paintEvent(QPaintEvent *){

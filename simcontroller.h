@@ -35,6 +35,8 @@ public:
 
     bool IsInitialize(){return (bool)balls.size();}
 
+    double NextDeltaT();
+
     double GetTime(){return tau;}
 
 private:

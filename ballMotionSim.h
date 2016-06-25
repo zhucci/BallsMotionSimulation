@@ -52,7 +52,7 @@ private:
     SynchroStatus status;
     QBasicTimer *timer;
     quint16 ttl;
-
+    int StepPause;
     SimController *controller;
     SynchronizationManager *syncManager;
 };

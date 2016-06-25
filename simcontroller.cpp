@@ -33,6 +33,20 @@ int SimController::SetMaxStepLength(double stepL){
     return EXIT_SUCCESS;
 }
 
+double SimController::NextDeltaT(){
+
+    if ((tau + delta_tau ) < nextCollision.tau) {
+
+        return 1;
+
+    }
+    else{
+
+        double dt = nextCollision.tau - tau;
+        return dt/delta_tau;
+    }
+}
+
 int SimController::Move()
 {
     if ((tau + delta_tau ) < nextCollision.tau) {
